@@ -1,6 +1,6 @@
 {
 	"name": "claude-sessions",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Auto-save Claude Code session context to Obsidian",
 	"main": "main.js",
 	"scripts": {

@@ -26,6 +26,66 @@ var import_obsidian3 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
+
+// src/keychain.ts
+var import_child_process = require("child_process");
+var KEYCHAIN_SENTINEL = "__keychain__";
+var ACCOUNT = "obsidian-claude-sessions";
+function serviceName(provider) {
+  return `claude-sessions-${provider}`;
+}
+function keychainSave(provider, key) {
+  try {
+    (0, import_child_process.execFileSync)("security", [
+      "add-generic-password",
+      "-U",
+      "-s",
+      serviceName(provider),
+      "-a",
+      ACCOUNT,
+      "-w",
+      key
+    ], { stdio: "pipe" });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function keychainLoad(provider) {
+  try {
+    const result = (0, import_child_process.execFileSync)("security", [
+      "find-generic-password",
+      "-s",
+      serviceName(provider),
+      "-a",
+      ACCOUNT,
+      "-w"
+    ], { stdio: "pipe" });
+    return result.toString().trim();
+  } catch (e) {
+    return "";
+  }
+}
+function keychainDelete(provider) {
+  try {
+    (0, import_child_process.execFileSync)("security", [
+      "delete-generic-password",
+      "-s",
+      serviceName(provider),
+      "-a",
+      ACCOUNT
+    ], { stdio: "pipe" });
+  } catch (e) {
+  }
+}
+function resolveKey(provider, storedValue) {
+  if (storedValue === KEYCHAIN_SENTINEL) {
+    return keychainLoad(provider);
+  }
+  return storedValue;
+}
+
+// src/settings.ts
 var DEFAULT_SETTINGS = {
   enabled: true,
   sessionsFolder: "00-Inbox",
@@ -102,9 +162,17 @@ var ClaudeSessionsSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     if (this.plugin.settings.aiProvider === "anthropic") {
-      new import_obsidian.Setting(containerEl).setName("Anthropic API key").setDesc("Your Anthropic API key (sk-ant-...). Stored in Obsidian plugin data.").addText((text) => {
-        text.setPlaceholder("sk-ant-api03-...").setValue(this.plugin.settings.anthropicApiKey).onChange(async (value) => {
-          this.plugin.settings.anthropicApiKey = value.trim();
+      const anthropicIsKeychain = this.plugin.settings.anthropicApiKey === KEYCHAIN_SENTINEL;
+      new import_obsidian.Setting(containerEl).setName("Anthropic API key").setDesc(anthropicIsKeychain ? "Stored in macOS Keychain. Enter a new value to replace it." : "Stored in macOS Keychain \u2014 never written to disk or iCloud.").addText((text) => {
+        text.setPlaceholder(anthropicIsKeychain ? "(stored in Keychain)" : "sk-ant-api03-...").setValue(anthropicIsKeychain ? "" : this.plugin.settings.anthropicApiKey).onChange(async (value) => {
+          const trimmed = value.trim();
+          if (trimmed) {
+            keychainSave("anthropic", trimmed);
+            this.plugin.settings.anthropicApiKey = KEYCHAIN_SENTINEL;
+          } else if (!anthropicIsKeychain) {
+            keychainDelete("anthropic");
+            this.plugin.settings.anthropicApiKey = "";
+          }
           await this.plugin.saveSettings();
         });
         text.inputEl.type = "password";
@@ -118,9 +186,17 @@ var ClaudeSessionsSettingTab = class extends import_obsidian.PluginSettingTab {
       );
     }
     if (this.plugin.settings.aiProvider === "openrouter") {
-      new import_obsidian.Setting(containerEl).setName("OpenRouter API key").setDesc("Your OpenRouter API key. Stored in Obsidian plugin data.").addText((text) => {
-        text.setPlaceholder("sk-or-...").setValue(this.plugin.settings.openRouterApiKey).onChange(async (value) => {
-          this.plugin.settings.openRouterApiKey = value.trim();
+      const openrouterIsKeychain = this.plugin.settings.openRouterApiKey === KEYCHAIN_SENTINEL;
+      new import_obsidian.Setting(containerEl).setName("OpenRouter API key").setDesc(openrouterIsKeychain ? "Stored in macOS Keychain. Enter a new value to replace it." : "Stored in macOS Keychain \u2014 never written to disk or iCloud.").addText((text) => {
+        text.setPlaceholder(openrouterIsKeychain ? "(stored in Keychain)" : "sk-or-...").setValue(openrouterIsKeychain ? "" : this.plugin.settings.openRouterApiKey).onChange(async (value) => {
+          const trimmed = value.trim();
+          if (trimmed) {
+            keychainSave("openrouter", trimmed);
+            this.plugin.settings.openRouterApiKey = KEYCHAIN_SENTINEL;
+          } else if (!openrouterIsKeychain) {
+            keychainDelete("openrouter");
+            this.plugin.settings.openRouterApiKey = "";
+          }
           await this.plugin.saveSettings();
         });
         text.inputEl.type = "password";
@@ -345,13 +421,15 @@ function shouldSkip(meta, settings) {
 async function generateAISummary(meta, settings) {
   var _a, _b, _c, _d, _e, _f, _g;
   const prompt = buildSummaryPrompt(meta);
-  if (settings.aiProvider === "anthropic" && settings.anthropicApiKey) {
+  const anthropicKey = resolveKey("anthropic", settings.anthropicApiKey);
+  const openRouterKey = resolveKey("openrouter", settings.openRouterApiKey);
+  if (settings.aiProvider === "anthropic" && anthropicKey) {
     try {
       const response = await (0, import_obsidian2.requestUrl)({
         url: "https://api.anthropic.com/v1/messages",
         method: "POST",
         headers: {
-          "x-api-key": settings.anthropicApiKey,
+          "x-api-key": anthropicKey,
           "anthropic-version": "2023-06-01",
           "content-type": "application/json"
         },
@@ -366,13 +444,13 @@ async function generateAISummary(meta, settings) {
         return text.trim();
     } catch (e) {
     }
-  } else if (settings.aiProvider === "openrouter" && settings.openRouterApiKey) {
+  } else if (settings.aiProvider === "openrouter" && openRouterKey) {
     try {
       const response = await (0, import_obsidian2.requestUrl)({
         url: "https://openrouter.ai/api/v1/chat/completions",
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${settings.openRouterApiKey}`,
+          "Authorization": `Bearer ${openRouterKey}`,
           "content-type": "application/json",
           "HTTP-Referer": "obsidian://claude-sessions",
           "X-Title": "Claude Sessions"
@@ -724,16 +802,20 @@ var ClaudeSessionsPlugin = class extends import_obsidian3.Plugin {
       ok = false;
     }
     if (this.settings.aiProvider === "anthropic") {
-      if (this.settings.anthropicApiKey.startsWith("sk-ant-")) {
-        checks.push(`\u2713 Anthropic API key set (format looks valid)`);
-      } else if (this.settings.anthropicApiKey) {
-        checks.push(`\u26A0 Anthropic API key set but format unexpected (expected sk-ant-...)`);
+      const key = resolveKey("anthropic", this.settings.anthropicApiKey);
+      const inKeychain = this.settings.anthropicApiKey === KEYCHAIN_SENTINEL;
+      if (key.startsWith("sk-ant-")) {
+        checks.push(`\u2713 Anthropic API key set${inKeychain ? " (Keychain)" : ""} \u2014 format valid`);
+      } else if (key) {
+        checks.push(`\u26A0 Anthropic key format unexpected (expected sk-ant-...)`);
       } else {
         checks.push(`\u26A0 No Anthropic API key \u2014 will use mechanical summaries`);
       }
     } else if (this.settings.aiProvider === "openrouter") {
-      if (this.settings.openRouterApiKey) {
-        checks.push(`\u2713 OpenRouter API key set (model: ${this.settings.openRouterModel})`);
+      const key = resolveKey("openrouter", this.settings.openRouterApiKey);
+      const inKeychain = this.settings.openRouterApiKey === KEYCHAIN_SENTINEL;
+      if (key) {
+        checks.push(`\u2713 OpenRouter API key set${inKeychain ? " (Keychain)" : ""} (model: ${this.settings.openRouterModel})`);
       } else {
         checks.push(`\u26A0 No OpenRouter API key \u2014 will use mechanical summaries`);
       }

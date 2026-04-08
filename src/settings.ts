@@ -1,6 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type ClaudeSessionsPlugin from "./main";
 import type { ClaudeSessionsSettings } from "./types";
+import { KEYCHAIN_SENTINEL, keychainDelete, keychainLoad, keychainSave } from "./keychain";
 
 export const DEFAULT_SETTINGS: ClaudeSessionsSettings = {
 	enabled: true,
@@ -142,15 +143,25 @@ export class ClaudeSessionsSettingTab extends PluginSettingTab {
 			);
 
 		if (this.plugin.settings.aiProvider === "anthropic") {
+			const anthropicIsKeychain = this.plugin.settings.anthropicApiKey === KEYCHAIN_SENTINEL;
 			new Setting(containerEl)
 				.setName("Anthropic API key")
-				.setDesc("Your Anthropic API key (sk-ant-...). Stored in Obsidian plugin data.")
+				.setDesc(anthropicIsKeychain
+					? "Stored in macOS Keychain. Enter a new value to replace it."
+					: "Stored in macOS Keychain — never written to disk or iCloud.")
 				.addText((text) => {
 					text
-						.setPlaceholder("sk-ant-api03-...")
-						.setValue(this.plugin.settings.anthropicApiKey)
+						.setPlaceholder(anthropicIsKeychain ? "(stored in Keychain)" : "sk-ant-api03-...")
+						.setValue(anthropicIsKeychain ? "" : this.plugin.settings.anthropicApiKey)
 						.onChange(async (value) => {
-							this.plugin.settings.anthropicApiKey = value.trim();
+							const trimmed = value.trim();
+							if (trimmed) {
+								keychainSave("anthropic", trimmed);
+								this.plugin.settings.anthropicApiKey = KEYCHAIN_SENTINEL;
+							} else if (!anthropicIsKeychain) {
+								keychainDelete("anthropic");
+								this.plugin.settings.anthropicApiKey = "";
+							}
 							await this.plugin.saveSettings();
 						});
 					text.inputEl.type = "password";
@@ -172,15 +183,25 @@ export class ClaudeSessionsSettingTab extends PluginSettingTab {
 		}
 
 		if (this.plugin.settings.aiProvider === "openrouter") {
+			const openrouterIsKeychain = this.plugin.settings.openRouterApiKey === KEYCHAIN_SENTINEL;
 			new Setting(containerEl)
 				.setName("OpenRouter API key")
-				.setDesc("Your OpenRouter API key. Stored in Obsidian plugin data.")
+				.setDesc(openrouterIsKeychain
+					? "Stored in macOS Keychain. Enter a new value to replace it."
+					: "Stored in macOS Keychain — never written to disk or iCloud.")
 				.addText((text) => {
 					text
-						.setPlaceholder("sk-or-...")
-						.setValue(this.plugin.settings.openRouterApiKey)
+						.setPlaceholder(openrouterIsKeychain ? "(stored in Keychain)" : "sk-or-...")
+						.setValue(openrouterIsKeychain ? "" : this.plugin.settings.openRouterApiKey)
 						.onChange(async (value) => {
-							this.plugin.settings.openRouterApiKey = value.trim();
+							const trimmed = value.trim();
+							if (trimmed) {
+								keychainSave("openrouter", trimmed);
+								this.plugin.settings.openRouterApiKey = KEYCHAIN_SENTINEL;
+							} else if (!openrouterIsKeychain) {
+								keychainDelete("openrouter");
+								this.plugin.settings.openRouterApiKey = "";
+							}
 							await this.plugin.saveSettings();
 						});
 					text.inputEl.type = "password";

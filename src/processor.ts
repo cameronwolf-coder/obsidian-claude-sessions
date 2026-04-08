@@ -1,5 +1,6 @@
 import { App, requestUrl, TFile } from "obsidian";
 import type { ClaudeSessionsSettings, SessionMeta, TranscriptEntry } from "./types";
+import { resolveKey } from "./keychain";
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
 
@@ -149,13 +150,16 @@ export async function generateAISummary(
 ): Promise<string> {
 	const prompt = buildSummaryPrompt(meta);
 
-	if (settings.aiProvider === "anthropic" && settings.anthropicApiKey) {
+	const anthropicKey = resolveKey("anthropic", settings.anthropicApiKey);
+	const openRouterKey = resolveKey("openrouter", settings.openRouterApiKey);
+
+	if (settings.aiProvider === "anthropic" && anthropicKey) {
 		try {
 			const response = await requestUrl({
 				url: "https://api.anthropic.com/v1/messages",
 				method: "POST",
 				headers: {
-					"x-api-key": settings.anthropicApiKey,
+					"x-api-key": anthropicKey,
 					"anthropic-version": "2023-06-01",
 					"content-type": "application/json",
 				},
@@ -170,13 +174,13 @@ export async function generateAISummary(
 		} catch {
 			// Fall through to mechanical
 		}
-	} else if (settings.aiProvider === "openrouter" && settings.openRouterApiKey) {
+	} else if (settings.aiProvider === "openrouter" && openRouterKey) {
 		try {
 			const response = await requestUrl({
 				url: "https://openrouter.ai/api/v1/chat/completions",
 				method: "POST",
 				headers: {
-					"Authorization": `Bearer ${settings.openRouterApiKey}`,
+					"Authorization": `Bearer ${openRouterKey}`,
 					"content-type": "application/json",
 					"HTTP-Referer": "obsidian://claude-sessions",
 					"X-Title": "Claude Sessions",

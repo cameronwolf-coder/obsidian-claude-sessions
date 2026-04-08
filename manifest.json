@@ -1,7 +1,7 @@
 {
 	"id": "claude-sessions",
 	"name": "Claude Sessions",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.0.0",
 	"description": "Auto-save Claude Code session context to your daily notes and a sessions archive.",
 	"author": "Cameron Wolf",

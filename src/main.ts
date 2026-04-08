@@ -2,6 +2,7 @@ import { Notice, Plugin, TFile } from "obsidian";
 import { ClaudeSessionsSettingTab, DEFAULT_SETTINGS } from "./settings";
 import { processQueueFile } from "./processor";
 import type { ClaudeSessionsSettings } from "./types";
+import { KEYCHAIN_SENTINEL, resolveKey } from "./keychain";
 
 export default class ClaudeSessionsPlugin extends Plugin {
 	settings: ClaudeSessionsSettings;
@@ -133,18 +134,22 @@ export default class ClaudeSessionsPlugin extends Plugin {
 			ok = false;
 		}
 
-		// Check AI provider + key
+		// Check AI provider + key (resolve from Keychain if needed)
 		if (this.settings.aiProvider === "anthropic") {
-			if (this.settings.anthropicApiKey.startsWith("sk-ant-")) {
-				checks.push(`✓ Anthropic API key set (format looks valid)`);
-			} else if (this.settings.anthropicApiKey) {
-				checks.push(`⚠ Anthropic API key set but format unexpected (expected sk-ant-...)`);
+			const key = resolveKey("anthropic", this.settings.anthropicApiKey);
+			const inKeychain = this.settings.anthropicApiKey === KEYCHAIN_SENTINEL;
+			if (key.startsWith("sk-ant-")) {
+				checks.push(`✓ Anthropic API key set${inKeychain ? " (Keychain)" : ""} — format valid`);
+			} else if (key) {
+				checks.push(`⚠ Anthropic key format unexpected (expected sk-ant-...)`);
 			} else {
 				checks.push(`⚠ No Anthropic API key — will use mechanical summaries`);
 			}
 		} else if (this.settings.aiProvider === "openrouter") {
-			if (this.settings.openRouterApiKey) {
-				checks.push(`✓ OpenRouter API key set (model: ${this.settings.openRouterModel})`);
+			const key = resolveKey("openrouter", this.settings.openRouterApiKey);
+			const inKeychain = this.settings.openRouterApiKey === KEYCHAIN_SENTINEL;
+			if (key) {
+				checks.push(`✓ OpenRouter API key set${inKeychain ? " (Keychain)" : ""} (model: ${this.settings.openRouterModel})`);
 			} else {
 				checks.push(`⚠ No OpenRouter API key — will use mechanical summaries`);
 			}
