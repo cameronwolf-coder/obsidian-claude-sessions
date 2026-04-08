@@ -1,0 +1,22 @@
+.claude-sessions-status {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	margin-top: 4px;
+}
+
+.claude-sessions-test-result {
+	margin-top: 8px;
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+
+.claude-sessions-test-result.success {
+	background: var(--background-modifier-success);
+	color: var(--text-success);
+}
+
+.claude-sessions-test-result.error {
+	background: var(--background-modifier-error);
+	color: var(--text-error);
+}
